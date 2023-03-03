@@ -26,13 +26,20 @@ module.exports = {
       help: 'If this is disabled, you will not receive a notice when the token is missing.',
       defaultValue: false,
     },
+    {
+      displayName: 'Use Identity Token',
+      type: 'boolean',
+      help: 'If this is enabled, use the identityToken instead of accessToken.',
+      defaultValue: false,
+    },
   ],
 
   async run(context,
     oauthRequestId,
     disableAutoPrefix,
     disableExpiredTokenCheck,
-    disableMissingTokenCheck
+    disableMissingTokenCheck,
+    useIdentityToken,
   ) {
     const { meta } = context;
 
@@ -48,21 +55,21 @@ module.exports = {
     const prefix = disableAutoPrefix ? '' : ((authenticationRequest || {}).authentication || {}).tokenPrefix || '';
 
     const token = await context.util.models.oAuth2Token.getByRequestId(authenticationRequest._id);
-    const accessToken = (token || {}).accessToken || '';
+    const accessToken = ( useIdentityToken ? (token || {}).identityToken : (token || {}).accessToken ) || '';
 
     if (context.renderPurpose == null) {
-      return `${prefix} ${accessToken || "<access-token-pending>"}`.trim();
+      return `${prefix} ${accessToken || "<token-pending>"}`.trim();
     }
 
     if (!accessToken) {
       if (!disableMissingTokenCheck)
-        await context.app.alert("Access Token", "The access token is missing");
+        await context.app.alert("Access Token", "The token is missing");
 
       return '';
     }
     else if (token.expiresAt < new Date()) {
       if (!disableExpiredTokenCheck)
-        await context.app.alert("Access Token", "The access token has expired");
+        await context.app.alert("Access Token", "The token has expired");
 
       return '';
     }
