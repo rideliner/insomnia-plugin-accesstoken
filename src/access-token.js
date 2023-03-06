@@ -1,3 +1,9 @@
+async function getTokens(context, authenticationRequest, useIdentityToken) {
+  const token = await context.util.models.oAuth2Token.getByRequestId(authenticationRequest._id);
+  const accessToken = ( useIdentityToken ? (token || {}).identityToken : (token || {}).accessToken ) || '';
+  return {token, accessToken};
+}
+
 module.exports = {
   name: 'token',
   displayName: 'Access Token',
@@ -27,6 +33,12 @@ module.exports = {
       defaultValue: false,
     },
     {
+      displayName: 'Auto-refresh Token',
+      type: 'boolean',
+      help: 'If this is enabled, trigger the request to get the token.',
+      defaultValue: true
+    },
+    {
       displayName: 'Use Identity Token',
       type: 'boolean',
       help: 'If this is enabled, use the identityToken instead of accessToken.',
@@ -39,6 +51,7 @@ module.exports = {
     disableAutoPrefix,
     disableExpiredTokenCheck,
     disableMissingTokenCheck,
+    autoRefreshToken,
     useIdentityToken,
   ) {
     const { meta } = context;
@@ -54,11 +67,15 @@ module.exports = {
     const authenticationRequest = await context.util.models.request.getById(oauthRequestId);
     const prefix = disableAutoPrefix ? '' : ((authenticationRequest || {}).authentication || {}).tokenPrefix || '';
 
-    const token = await context.util.models.oAuth2Token.getByRequestId(authenticationRequest._id);
-    const accessToken = ( useIdentityToken ? (token || {}).identityToken : (token || {}).accessToken ) || '';
+    var {token, accessToken} = await getTokens(context, authenticationRequest, useIdentityToken);
 
     if (context.renderPurpose == null) {
       return `${prefix} ${accessToken || "<token-pending>"}`.trim();
+    }
+
+    if (autoRefreshToken && (!accessToken || token.expiresAt < new Date())) {
+      await context.network.sendRequest(authenticationRequest);
+      var {token, accessToken} = await getTokens(context, authenticationRequest, useIdentityToken);
     }
 
     if (!accessToken) {
